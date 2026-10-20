@@ -18,8 +18,8 @@
 #
 # Needs a PartCAD whose partTypes can read a file (`extension:`), which hands
 # a script the part's file as `request["path"]` and this package's cache
-# directory as `request["cache_dir"]`; and, for the assemblies, one that hands
-# an `import:` reader a binary file as it is.
+# directory as `request["cache_dir"]`; and, for the assemblies, one that reads
+# `binary: true` on an `import:` entry and hands its reader the file as it is.
 #
 # No package-wide `pythonRequirements`, on purpose: PartCAD installs those into
 # every sandbox this package's scripts run in, and the three need different
@@ -77,6 +77,11 @@ import:
     extension: dwg
     kinds: [assembly]
     noun: drawing
+    # A DWG is binary: handed to the reader as it is, rather than rendered as
+    # a Jinja2 template first, which is what PartCAD does to an assembly's file
+    # otherwise. A PartCAD older than the key passes it to the reader, which
+    # ignores it.
+    binary: true
     # In this order: CadQuery's importer reads the geometry, and is pinned to
     # what PartCAD pins it to for its own DXF sketches.
     pythonRequirements:
@@ -115,6 +120,9 @@ import:
     extension: dxf
     kinds: [assembly]
     noun: drawing
+    # So is a DXF, as far as this is concerned: CADCraft reads binary DXF as
+    # well as ASCII, and a drawing is not a template.
+    binary: true
     pythonRequirements:
       - cadquery-ocp==7.9.3.1.1
       - cadquery==2.8.0
