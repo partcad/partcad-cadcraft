@@ -1,0 +1,8 @@
+# What the scripts download on first use (see cadcraft_tool.py).
+.cache/
+
+# What PartCAD and Python leave behind in a package they have worked in.
+.partcad
+__pycache__
+*.pyc
+.pytest_cache

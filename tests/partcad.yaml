@@ -1,0 +1,65 @@
+# The package these tests build from: what a workspace using this plugin looks
+# like, with the plugin imported through a `local` dependency rather than from
+# the public index.
+#
+# The `.pcignore` beside this file is what keeps it out of the plugin's own
+# package tree. Without it this folder would be a subpackage of the plugin --
+# listed wherever the plugin is used -- and a workspace opened in here would
+# climb to the plugin as its root.
+
+desc: |
+  Parts and assemblies read with the CADCraft plugin, from the drawings beside
+  this file (written by `make_samples.py`):
+
+  - 'plate.dwg' / 'plate.dxf', a 4 x 2 inch plate with two bolt holes placed as
+    block references, a bend line and a note;
+  - 'kit.dwg' / 'kit.dxf', a millimetre drawing of blocks placed as they are,
+    turned, inside another block, scaled and mirrored, beside an outline drawn
+    outside any block.
+
+dependencies:
+  cadcraft:
+    type: local
+    path: ..
+
+parts:
+  plate:
+    type: cadcraft:dwg # reads plate.dwg
+    parameters:
+      thickness:
+        type: float
+        default: 3
+      excludeLayers:
+        type: string
+        default: BENDS
+  plate_dxf:
+    type: cadcraft:dxf
+    path: plate.dxf
+    parameters:
+      thickness:
+        type: float
+        default: 3
+      excludeLayers:
+        type: string
+        default: BENDS
+
+assemblies:
+  kit:
+    type: cadcraft:dwg # reads kit.dwg
+    thickness: 2
+  kit_dxf:
+    type: cadcraft:dxf
+    path: kit.dxf
+    thickness: 2
+
+sketches:
+  # PartCAD's own DXF sketch, which the plugin leaves as it is: rendered to a
+  # DWG below, it is drawn as the edges it is made of.
+  outline:
+    type: dxf
+    path: plate.dxf
+    include: [OUTLINE]
+
+render:
+  dwg:
+    reproducible: true

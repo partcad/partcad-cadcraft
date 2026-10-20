@@ -1,0 +1,5 @@
+* text=auto eol=lf
+*.dwg binary
+# A DXF is text, but its bytes are what the tests compare and what a
+# reproducible render promises: kept exactly as written.
+*.dxf -text

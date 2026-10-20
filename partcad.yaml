@@ -1,0 +1,202 @@
+# CADCraft for PartCAD: AutoCAD drawings, DWG and DXF, read as parts and as
+# assemblies, objects rendered as drawings, and the application itself for
+# `pc ide open`.
+#
+# A package importing this one as `cadcraft` writes `cadcraft:dwg` (or
+# `cadcraft:dxf`) wherever it means that format, and which entry it reaches is
+# decided by where it is written:
+#
+#   parts:       type: cadcraft:dwg   -> `partTypes:` below: the drawing's outlines, extruded
+#   assemblies:  type: cadcraft:dwg   -> `import:` below: each block a part, each reference an instance
+#   pc render -t cadcraft:dwg         -> `render:` below: a drawing of any object
+#
+# Everything here runs CADCraft's command line tool, `cadcraft-cli`. It is found
+# on the PATH, in this package's image where PartCAD's `docker` sandbox is in
+# use and the image can be pulled, or downloaded on first use -- the release
+# pinned in `cadcraft_tool.py`, checked against its published SHA-256 -- into
+# this package's cache directory, and kept there.
+#
+# Needs a PartCAD whose partTypes can read a file (`extension:`), which hands
+# a script the part's file as `request["path"]` and this package's cache
+# directory as `request["cache_dir"]`; and, for the assemblies, one that hands
+# an `import:` reader a binary file as it is.
+#
+# No package-wide `pythonRequirements`, on purpose: PartCAD installs those into
+# every sandbox this package's scripts run in, and the three need different
+# things.
+
+name: //pub/feature/cad/cadcraft
+desc: |
+  [CADCraft](https://github.com/storytold/cadcraft) for PartCAD: AutoCAD
+  drawings (DWG and DXF) read as parts and as assemblies, any object rendered
+  as a DWG or a DXF drawing, and CADCraft as an application `pc ide open` opens
+  drawings in.
+
+# Where these scripts run best: PartCAD's Python sandbox image with CADCraft on
+# the PATH (see `Dockerfile`). A preference, not a requirement -- a machine
+# that cannot pull it runs them in PartCAD's own sandbox, and the scripts fetch
+# `cadcraft-cli` themselves.
+#
+# The tag is a hash of what the image is built from rather than a version. It
+# is immutable, so this pin keeps working when the image is next edited, and an
+# image and the code expecting it cannot drift apart silently. PartCAD appends
+# the machine's architecture before pulling, so one line here covers both. See
+# `.github/workflows/image.yml` and `image-tag.sh`.
+dockerImage: ghcr.io/partcad/partcad-cadcraft:9a77dd0c26f5
+
+partTypes:
+  dwg:
+    desc: |
+      A part read from an AutoCAD drawing (`.dwg`): the outlines on the layers
+      it reads, as faces with their holes, extruded along +Z by the part's
+      `thickness` parameter when it has one.
+    path: read_part.py
+    extension: dwg
+    # PartCAD adds build123d and the VTK-enabled OCP after these.
+    pythonRequirements:
+      - cadquery==2.8.0
+      - ezdxf==1.4.4
+  dxf:
+    desc: |
+      A part read from a DXF drawing, as `dwg` reads a DWG -- an alternative to
+      a `dxf` sketch extruded, that also reads block references, honours the
+      drawing's units and keeps every outline rather than the first.
+    path: read_part.py
+    extension: dxf
+    pythonRequirements:
+      - cadquery==2.8.0
+      - ezdxf==1.4.4
+
+import:
+  dwg:
+    desc: |
+      An AutoCAD drawing (`.dwg`) as an assembly: each block a part, each block
+      reference a placed instance of it, and what is drawn outside any block a
+      part per layer.
+    path: read_assembly.py
+    extension: dwg
+    kinds: [assembly]
+    noun: drawing
+    # In this order: CadQuery's importer reads the geometry, and is pinned to
+    # what PartCAD pins it to for its own DXF sketches.
+    pythonRequirements:
+      - cadquery-ocp==7.9.3.1.1
+      - cadquery==2.8.0
+      - ezdxf==1.4.4
+    # Everything below is a parameter of the reader, and an assembly may set
+    # any of them for itself: `thickness: 3` beside its `path:`. None is named
+    # `include`, `exclude`, `tolerance` or `timeout`: PartCAD reserves or means
+    # something by each of those on an object, so a reader never sees them.
+    #
+    # How far to extrude every part's faces, in millimetres. 0 keeps the parts
+    # flat: the faces the outlines bound.
+    thickness: 0
+    # Which layers are read -- block references by the layer they are on, and
+    # what is drawn outside any block by its own; either list, not both.
+    includeLayers: []
+    excludeLayers: []
+    # `auto` scales by the unit the drawing says it is in ($INSUNITS); mm, cm,
+    # m, in, ft or none say it instead.
+    units: auto
+    # How far apart two ends may be and still be joined into one outline.
+    joinTolerance: 0.000001
+    # How long CADCraft may take to convert the drawing, in seconds.
+    cadcraftTimeout: 600
+    dropped:
+      text: "text (TEXT, MTEXT and attributes)"
+      dimension: "dimensions and leaders"
+      hatch: "hatches and solid fills"
+      other: "entities that are not lines, arcs, circles, ellipses, splines or polylines"
+      layer: "layers that draw no geometry"
+      block: "block references to blocks that draw no geometry"
+  dxf:
+    desc: A DXF drawing as an assembly, as `dwg` reads a DWG.
+    path: read_assembly.py
+    extension: dxf
+    kinds: [assembly]
+    noun: drawing
+    pythonRequirements:
+      - cadquery-ocp==7.9.3.1.1
+      - cadquery==2.8.0
+      - ezdxf==1.4.4
+    thickness: 0
+    includeLayers: []
+    excludeLayers: []
+    units: auto
+    joinTolerance: 0.000001
+    cadcraftTimeout: 600
+    dropped:
+      text: "text (TEXT, MTEXT and attributes)"
+      dimension: "dimensions and leaders"
+      hatch: "hatches and solid fills"
+      other: "entities that are not lines, arcs, circles, ellipses, splines or polylines"
+      layer: "layers that draw no geometry"
+      block: "block references to blocks that draw no geometry"
+
+# Drawings, so `render:` and not `export:`: what these write is an output file
+# -- the object's edges seen from one direction -- and not geometry another CAD
+# tool can go on modelling with. (`pc export -t cadcraft:dwg` writes the same
+# file: a section follows the declaration, not the command.)
+render:
+  dwg:
+    desc: The object as an AutoCAD drawing (DWG); a sketch as it is, anything else projected.
+    path: render_drawing.py
+    extension: dwg
+    # build123d draws the projection and writes the DXF CADCraft saves. The
+    # VTK-enabled OCP is asserted after it, as PartCAD's own renderers do.
+    pythonRequirements:
+      - build123d==0.11.1
+      - cadquery-ocp==7.9.3.1.1
+      - ezdxf==1.4.4
+    # The DWG version written: 2000, 2004, 2007, 2010, 2013 or 2018.
+    dwgVersion: 2018
+    # A plan view: looking down from +Z, +Y up. A sketch is never projected, so
+    # these only matter for parts and assemblies.
+    viewport_origin: [0, 0, 100]
+    viewport_up: [0, 1, 0]
+    # Also draw the edges the object hides, dashed, on a layer of their own.
+    hidden_lines: false
+    # The line weight in millimetres; empty leaves it to the viewer.
+    line_weight: null
+    # The same bytes for the same drawing, so that a DWG kept in a repository
+    # changes only when the drawing does: a fixed creation time and GUIDs
+    # rather than the clock's, which CADCraft carries into what it saves.
+    reproducible: false
+    cadcraftTimeout: 600
+  dxf:
+    desc: |
+      The object as a DXF drawing, written by CADCraft -- the alternative to
+      PartCAD's built-in `dxf`, with curves kept as curves, hidden lines, the
+      DXF version chosen and binary DXF.
+    path: render_drawing.py
+    extension: dxf
+    pythonRequirements:
+      - build123d==0.11.1
+      - cadquery-ocp==7.9.3.1.1
+      - ezdxf==1.4.4
+    # The DXF version written: 2000, 2004, 2007, 2010, 2013 or 2018.
+    dxfVersion: 2018
+    # A binary DXF rather than an ASCII one: smaller, and faster to read.
+    binary: false
+    viewport_origin: [0, 0, 100]
+    viewport_up: [0, 1, 0]
+    hidden_lines: false
+    line_weight: null
+    reproducible: false
+    cadcraftTimeout: 600
+
+open:
+  cadcraft:
+    displayName: CADCraft
+    # Drawings, and nothing else: a solid would have to be drawn first, and an
+    # edit to that drawing would have nowhere to go back to. DWG first, the
+    # format CADCraft is about.
+    formats: [dwg, dxf]
+    binaries: [cadcraft]
+    macosApps: [CADCraft.app]
+    windowsGlobs: ["CADCraft*/cadcraft.exe", "cadcraft-*-portable/cadcraft.exe"]
+    flatpakId: ai.storyteller.cadcraft
+    # Where CADCraft is not installed: the same image as above, pulled on
+    # demand, with the display forwarded into it.
+    container:
+      image: ghcr.io/partcad/partcad-cadcraft:9a77dd0c26f5

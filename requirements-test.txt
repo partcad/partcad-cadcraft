@@ -1,0 +1,13 @@
+# What the tests need beyond the standard library, at the versions partcad.yaml
+# pins for the sandboxes. Then, as a second step, put the VTK-enabled OCP back
+# over the build build123d brings, as PartCAD does in every sandbox:
+#
+#   pip install -r requirements-test.txt
+#   pip install --force-reinstall --no-deps cadquery-ocp==7.9.3.1.1
+#
+# PartCAD itself is not here: the tests that need it skip without it, and the
+# one to test against is a choice (see .github/workflows/test.yml).
+cadquery==2.8.0
+ezdxf==1.4.4
+build123d==0.11.1
+pytest
