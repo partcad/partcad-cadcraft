@@ -5,13 +5,10 @@
 #
 """The package, as a workspace uses it: the package beside this file, through PartCAD.
 
-Skipped where PartCAD is not installed, or is older than the file-backed
-partTypes this plugin is built on. The tests that build something are marked
-'slow': the first of them downloads CADCraft and builds PartCAD's sandbox.
-
-The assemblies need one thing more, an `import:` reader handed a binary file as
-it is; against a PartCAD that renders it as a template first they fail with a
-UnicodeDecodeError, which is what the skip below checks for.
+Skipped where PartCAD is not installed, or is older than the one `partcad.yaml`
+says this package needs -- which would refuse the package rather than build it.
+The tests that build something are marked 'slow': the first of them downloads
+CADCraft and builds PartCAD's sandbox.
 """
 
 import asyncio
@@ -24,11 +21,21 @@ from conftest import HERE, PLUGIN
 INCH = 25.4
 
 
+def _floor():
+    """The PartCAD this package says it needs, as 'partcad:' in its partcad.yaml."""
+    import re
+
+    with open(os.path.join(PLUGIN, "partcad.yaml"), encoding="utf-8") as f:
+        return re.search(r'^partcad:\s*"([^"]+)"', f.read(), re.M).group(1)
+
+
 def _partcad():
-    """PartCAD, if it is installed and new enough to read a file through a partType."""
+    """PartCAD, if it is installed and as new as this package says it needs."""
     pc = pytest.importorskip("partcad")
-    if not hasattr(pc.output, "package_cache_dir"):
-        pytest.skip("this PartCAD's partTypes cannot read a file; it is older than this plugin")
+    from packaging.specifiers import SpecifierSet
+
+    if pc.__version__ not in SpecifierSet(_floor()):
+        pytest.skip("PartCAD %s is older than the %s this package needs" % (pc.__version__, _floor()))
     return pc
 
 
@@ -101,10 +108,7 @@ def test_a_parameter_changes_the_part(ctx):
 @pytest.mark.parametrize("name", ["kit", "kit_dxf"])
 def test_an_assembly_holds_each_block_once_per_reference(ctx, name):
     assembly = ctx.get_assembly(":" + name)
-    try:
-        asyncio.run(assembly.do_instantiate())
-    except UnicodeDecodeError:
-        pytest.skip("this PartCAD renders an import: reader's binary file as a template")
+    asyncio.run(assembly.do_instantiate())
     names = [child.name for child in assembly.children]
     assert names == ["BRACKET", "BRACKET", "FRAME", "PIN_scaled_2", "BRACKET_transformed", "BASE"]
     # One part per block, however many times it is placed.

@@ -13,9 +13,10 @@ formats, DWG and DXF:
 
 `cadcraft:` is the name the workspace imports this package under; use whatever name the dependency is given.
 
-It needs a PartCAD whose partTypes can read a file -- the `extension:` of a `partType` -- which is what hands a
-script the part's file and this package's cache directory; and, for the assemblies, one that hands an `import:`
-reader a binary file as it is.
+It needs PartCAD 0.8.235 or newer, the first whose partTypes can read a file -- the `extension:` of a `partType` --
+which is what hands a script the part's file and this package's cache directory, and whose `import:` readers can be
+handed a binary file as it is (`binary: true`), which is what the assemblies need. `partcad.yaml` says so, and an
+older PartCAD refuses the package rather than failing every drawing.
 
 ## Using it
 
@@ -49,6 +50,14 @@ assemblies:
 ```shell
 pc render -t cadcraft:dwg :plate     # a plan view of the plate, as a DWG
 pc render -t cadcraft:dxf -a enclosure
+```
+
+It is also in PartCAD's public index, as `//pub/feature/cad/cadcraft`, which needs no dependency of its own:
+
+```yaml
+parts:
+  plate:
+    type: //pub/feature/cad/cadcraft:dwg
 ```
 
 Each part or assembly is one file, declared exactly like a STEP part: `path` relative to the package declaring it,
@@ -193,7 +202,8 @@ pytest -m "not slow"   # without building anything in PartCAD
 ```
 
 What needs nothing but the standard library (the downloader) always runs; the geometry needs CadQuery and skips
-without it; what goes through PartCAD needs PartCAD and skips without it, or with one too old.
+without it; what goes through PartCAD needs PartCAD and skips without it, or with one older than `partcad.yaml`
+requires (`pip install "partcad>=0.8.235"`).
 `CADCRAFT_NETWORK_TESTS=1` also checks the pinned checksums against the release itself.
 
 ## Updating CADCraft
