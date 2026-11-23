@@ -47,7 +47,7 @@ CLI = "cadcraft-cli"
 # checksum below, the version and the Linux checksums in the 'Dockerfile' (a
 # test holds the two to each other), and CACHE_VERSION in every script: another
 # CADCraft may convert the same drawing differently.
-VERSION = "0.8.0"
+VERSION = "0.20.1"
 RELEASE_URL = "https://github.com/storytold/cadcraft/releases/download/v{version}/{asset}"
 CHECKSUMS_ASSET = "SHA256SUMS.txt"
 
@@ -58,14 +58,13 @@ ENV_VERSION = "CADCRAFT_VERSION"
 # version not listed here (CADCRAFT_VERSION) is checked against the
 # 'SHA256SUMS.txt' published with it instead.
 PINNED_SHA256 = {
-    "cadcraft-0.8.0-linux-x86_64.tar.gz": "df3c2e668439f0410564b1fa9d21827bb663eb3d01703902c41f02b9c5276193",
-    "cadcraft-0.8.0-linux-aarch64.tar.gz": "e7e7a805d683433733a77951326163506f203bd5dee515f465a5c575669d3f85",
-    "cadcraft-0.8.0-linux-riscv64.tar.gz": "a4201026df74e853f59926f5920fa822998ce7fe117496f9ccb7c5ccaf9c0e5e",
-    "cadcraft-0.8.0-freebsd-x86_64.tar.gz": "49154b97b5561af1522dc43e97b3f92a72d232a2e02257117306d3a59a34eb2e",
-    "cadcraft-cli-0.8.0-macos-universal.zip": "0647286d06e2bf5da9fd1303f481966962ad224b57b4fa7adf2087a1e387e30b",
-    "cadcraft-0.8.0-windows-x64-portable.zip": "939f970955653720558a90b0c788a356903fbe3b085e1bfb33fb67441957f92d",
-    "cadcraft-0.8.0-windows-arm64-portable.zip": "8b0ef8149346a303cb6c2d98ae14d941bd22a4a3f5ed94df014db6d473e327cc",
-    "cadcraft-0.8.0-windows-x86-portable.zip": "2b8e58394580b6646144a577903cbe83097c5e9f96ea32c69c1e6a6e0401bb4a",
+    "cadcraft-0.20.1-linux-x86_64.tar.gz": "57b6f1b41b4f3c542a82f103202ed1a779440e5ff8d25c08ef66abda1a8cb1b9",
+    "cadcraft-0.20.1-linux-aarch64.tar.gz": "b149db4bdf61d135fcb40ce7361828c75b18d6f3f710e165ca17f30819d23212",
+    "cadcraft-0.20.1-linux-riscv64.tar.gz": "5158d96c655b87ab34cf5ea301d98928404e0ca3333fdbed83e5596d7e988942",
+    "cadcraft-0.20.1-freebsd-x86_64.tar.gz": "09a829383b1df997562bf1ad09d9c969f32c65c634498c7b499a2601937d1a9a",
+    "cadcraft-cli-0.20.1-macos-universal.zip": "2754055a4f318d028fb9cc7aac0a98987d21c2b5c20f079ca2feb1469f28fb3b",
+    "cadcraft-0.20.1-windows-x64-portable.zip": "76904b4accff32fbc995adc9bb0137ecd982aa403cf79a281e3f10b48ca14778",
+    "cadcraft-0.20.1-windows-arm64-portable.zip": "21db3d3d3b03c4f5ae9a8b95e22390a2a8f45ab3e3ad081275246bd58c3c54ff",
 }
 
 # What 'platform.machine()' says, in the spelling CADCraft names its archives in.
@@ -86,7 +85,9 @@ ARCHITECTURES = {
 SUPPORTED = {
     "linux": ("x86_64", "aarch64", "riscv64"),
     "freebsd": ("x86_64",),
-    "windows": ("x86_64", "aarch64", "x86"),
+    # 32-bit Windows had a build until 0.8.0 and has none since; nor does
+    # PartCAD's OpenCASCADE, so no sandbox this runs in is one.
+    "windows": ("x86_64", "aarch64"),
 }
 WINDOWS_ARCHITECTURES = {"x86_64": "x64", "aarch64": "arm64", "x86": "x86"}
 
@@ -369,13 +370,33 @@ def _warnings(completed):
     ]
 
 
+@contextlib.contextmanager
+def staged(target):
+    """A path to have CADCraft write 'target' to, moved over 'target' once it is written.
+
+    CADCraft keeps the file a save replaces as '<name>.bak' beside it (its
+    ISAVEBAK, on by default), so a drawing rendered again into a package would
+    leave one behind every time. Written into a directory of its own, where
+    there is nothing to replace, and moved into place, it leaves nothing -- and
+    without changing a setting that CADCraft may keep for its user's desktop
+    application too. Beside the target, so that the move is a rename.
+    """
+    target = os.path.abspath(target)
+    with tempfile.TemporaryDirectory(prefix=".cadcraft-", dir=os.path.dirname(target)) as directory:
+        path = os.path.join(directory, os.path.basename(target))
+        yield path
+        if os.path.isfile(path):
+            os.replace(path, target)
+
+
 def convert(source, target, cache_dir=None, timeout=DEFAULT_TIMEOUT):
     """Convert 'source' to 'target', each in the format its extension names.
 
     Returns what CADCraft warned about on the way, as lines: the entities a
     format cannot hold are reported rather than dropped in silence.
     """
-    completed = run(["convert", source, target], cache_dir=cache_dir, timeout=timeout)
+    with staged(target) as path:
+        completed = run(["convert", source, path], cache_dir=cache_dir, timeout=timeout)
     if not os.path.isfile(target):
         raise CadcraftError("cadcraft-cli reported success but wrote no %s" % target)
     return _warnings(completed)
@@ -387,16 +408,17 @@ def save_as(source, target, version=None, binary=False, cache_dir=None, timeout=
     'version' is one of 2000, 2004, 2007, 2010, 2013, 2018 (CADCraft's default,
     2018, when None); 'binary' writes a binary DXF, and is for DXF only.
     """
-    params = {"path": os.path.abspath(target)}
-    if version:
-        params["version"] = str(version)
-    if binary:
-        params["binary"] = True
-    completed = run(
-        ["run", os.path.abspath(source), "--cmd", "saveas " + json.dumps(params)],
-        cache_dir=cache_dir,
-        timeout=timeout,
-    )
+    with staged(target) as path:
+        params = {"path": path}
+        if version:
+            params["version"] = str(version)
+        if binary:
+            params["binary"] = True
+        completed = run(
+            ["run", os.path.abspath(source), "--cmd", "saveas " + json.dumps(params)],
+            cache_dir=cache_dir,
+            timeout=timeout,
+        )
     if not os.path.isfile(target):
         raise CadcraftError("cadcraft-cli reported success but wrote no %s" % target)
     return _warnings(completed)

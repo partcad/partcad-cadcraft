@@ -75,6 +75,23 @@ def test_the_plugin_declares_its_types_drawings_and_application(ctx):
     assert plugin.config_obj["open"]["cadcraft"]["formats"] == ["dwg", "dxf"]
 
 
+def test_the_plugin_draws_sheets_for_the_draft_tab(ctx):
+    pc = _partcad()
+    plugin = ctx.get_project("//cadcraft")
+    # What 'render.formats' lists for the IDE's Draft tab, in this order.
+    section = plugin.config_obj["render"]
+    assert pc.output.format_names(section) == ["dwg", "dxf", "pdf", "svg", "png"]
+    for name in ("pdf", "svg", "png"):
+        assert section[name]["path"] == "render_sheet.py"
+        # A sheet draws the parts as they are, whatever the built-in layer under it says.
+        assert section[name]["visuals"] is False
+    # Each sheet type writes the file its name asks for.
+    part = ctx.get_part(":plate")
+    for name in ("pdf", "svg", "png"):
+        _impl, path = part.output_getopts(ctx, name, options_project=plugin, output_dir="/out")
+        assert path.endswith("plate." + name)
+
+
 @pytest.mark.parametrize("name, file", [("plate", "plate.dwg"), ("plate_dxf", "plate.dxf")])
 def test_the_file_is_the_workspace_s(ctx, name, file):
     part = ctx.get_part(":" + name)
@@ -132,3 +149,17 @@ def test_anything_renders_as_a_drawing(ctx, tmp_path, format_name, header):
         assert target.is_file(), shape.errors
         with open(target, "rb") as f:
             assert re.match(header, f.read(32)), target
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("format_name, header", [("svg", b"<"), ("pdf", b"%PDF-"), ("png", b"\x89PNG")])
+def test_anything_renders_as_a_drawing_sheet(ctx, tmp_path, format_name, header):
+    for name, kind in ((":plate", "part"), (":outline", "sketch")):
+        shape = ctx.get_part(name) if kind == "part" else ctx.get_sketch(name)
+        target = tmp_path / ("%s.%s" % (name[1:], format_name))
+        # As the Draft tab asks for it: 'pc render -t <format> -e //cadcraft'.
+        asyncio.run(
+            shape.render_async(ctx, format_name=format_name, filepath=str(target), options_package="//cadcraft")
+        )
+        assert target.is_file(), shape.errors
+        assert target.read_bytes().startswith(header), target

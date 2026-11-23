@@ -9,6 +9,7 @@ formats, DWG and DXF:
 | A part read from a drawing: its outlines, extruded | `type: cadcraft:dwg` (or `cadcraft:dxf`) under `parts:` | `partTypes:` |
 | An assembly read from a drawing: each block a part, each block reference an instance | `type: cadcraft:dwg` (or `cadcraft:dxf`) under `assemblies:` | `import:` |
 | A drawing of any object, as DWG or DXF | `pc render -t cadcraft:dwg` (or `cadcraft:dxf`) | `render:` |
+| A drawing sheet of any object -- views, dimensions, title block -- as PDF, SVG or PNG (or DWG and DXF with `sheet: true`) | `pc render -t cadcraft:pdf` (or `svg`, `png`), or **Drawn by** CADCraft on the Draft tab of the PartCAD extension for VS Code | `render:` |
 | CADCraft itself, to view and edit a drawing in | `pc ide open --with cadcraft`, or *Open in > CADCraft* in the PartCAD extension for VS Code | `open:` |
 
 `cadcraft:` is the name the workspace imports this package under; use whatever name the dependency is given.
@@ -144,6 +145,54 @@ through its SVG projection and flattens every curve into straight segments. Then
 | `line_weight` | none | in millimetres |
 | `reproducible` | `false` | fixed creation time and GUIDs instead of the clock's |
 
+### A drawing sheet
+
+The drawing somebody is handed to make the thing from: the views, dimensioned, on an ISO sheet with a title block.
+
+```shell
+pc render -t pdf -e //pub/feature/cad/cadcraft //your/package:bracket
+pc render -t svg -e //pub/feature/cad/cadcraft //your/package:bracket
+```
+
+`-e` reads `pdf`, `svg` and `png` from this package -- PartCAD's own `svg` and `png` are a single picture -- so
+nothing changes in the package being drawn; it is what the Draft tab of the PartCAD extension for VS Code asks for
+when **Drawn by** is CADCraft. [`render_sheet.py`](render_sheet.py) does it in two halves:
+
+* **PartCAD projects the views**, because CADCraft is a 2D drafting application with no 3D model to project: the
+  front, top and right views, lined up in the drawing's projection (third angle unless `projection: first`), and an
+  isometric view in the corner left over, through OCCT's exact hidden-line algorithm. Hidden edges are dashed, and
+  every hole a view sees end on gets a centre mark. A sketch is the one view it is.
+* **CADCraft does the drafting**: the views are imported into a new metric drawing; the front view's overall width
+  and height, the depth across the side view and the diameter of each size of hole are dimensioned in its ISO style;
+  an ISO A0-A4 paper-space layout gets the ISO 5457 frame, a title block, and one viewport at the largest ISO 5455
+  scale the views fit at; and the layout is plotted. With `sheet: true` on `dwg` or `dxf` it is saved instead, layout
+  and all, its dimensions associated with the edges they measure.
+
+```yaml
+render:
+  pdf:
+    title: Mounting Plate     # default: the object's name
+    number: PC-EX-0001        # Identification number
+    revision: B
+    drawn_by: A. Engineer     # Created by
+    approved_by: B. Checker
+    date: "2026-11-23"        # Date of issue
+    company: ACME Corp.       # Legal owner
+    material: AL 6061-T6
+    page: A3                  # ISO A0 to A4; default A3 for a part, A2 for an assembly
+    scale: 2                  # 2:1, or "paper:model" text; default: the largest that fits
+    projection: first         # default: third
+```
+
+The title block's names are the ones `//pub/feature/render/draftwright` and `//pub/feature/cad/solidcraft` take, so
+a package that configures its drawings once gets the same title block from any of the three. `partcad.yaml` lists
+the rest (`orientation`, `iso`, `hidden_lines`, `dimensions`). Every sheet is the same bytes every time it is drawn
+from the same object: nothing in it comes from the clock.
+
+What it dimensions is what can be read off the geometry without knowing how it was designed: the overall sizes and
+the holes. Positions, fillets and tolerances are a drafter's to add, in CADCraft (`pc ide open --with cadcraft` on the
+DWG).
+
 ### Opening a drawing in CADCraft
 
 `pc ide open --with cadcraft <file>` opens a DWG or a DXF in CADCraft, and in VS Code *Open in > CADCraft* is on
@@ -170,9 +219,9 @@ Everything here runs CADCraft's command line tool, `cadcraft-cli`. Whichever com
    which in a workspace is PartCAD's cached copy of this package -- under its version and platform, and reused
    from then on. Where that directory cannot be written, the user's cache directory is used.
 
-CADCraft publishes a command line tool for Linux (x86_64, aarch64, riscv64), macOS (universal), Windows (x64, arm64,
-x86) and FreeBSD (x86_64), so the download works on every operating system PartCAD runs on, and the image covers
-Linux on x86_64 and aarch64 wherever Docker runs.
+CADCraft publishes a command line tool for Linux (x86_64, aarch64, riscv64), macOS (universal), Windows (x64, arm64)
+and FreeBSD (x86_64), so the download works on every operating system PartCAD runs on, and the image covers Linux on
+x86_64 and aarch64 wherever Docker runs. (32-bit Windows had a build until 0.8.0; PartCAD's OpenCASCADE has none.)
 
 ## The image
 
@@ -210,8 +259,8 @@ requires (`pip install "partcad>=0.8.235"`).
 
 Change `VERSION` and every checksum in `cadcraft_tool.py` (from the release's `SHA256SUMS.txt`), the version and
 both Linux checksums in the `Dockerfile` (a test holds the two to each other), then run `./image-tag.sh` and update
-both pins in `partcad.yaml`. Raise `CACHE_VERSION` in `read_part.py`, `read_assembly.py` and `render_drawing.py`,
-and run `python tests/make_samples.py` to write the sample DWGs again.
+both pins in `partcad.yaml`. Raise `CACHE_VERSION` in `read_part.py`, `read_assembly.py`, `render_drawing.py` and
+`render_sheet.py`, and run `python tests/make_samples.py` to write the sample DWGs again.
 
 ## Licences
 

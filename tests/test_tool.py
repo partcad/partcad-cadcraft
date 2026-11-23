@@ -104,7 +104,9 @@ def test_every_platform_cadcraft_builds_for_has_a_key(tool, system, machine, key
     assert tool.platform_key(system, machine) == key
 
 
-@pytest.mark.parametrize("system, machine", [("Linux", "mips"), ("FreeBSD", "arm64"), ("SunOS", "sparc")])
+@pytest.mark.parametrize(
+    "system, machine", [("Linux", "mips"), ("FreeBSD", "arm64"), ("SunOS", "sparc"), ("Windows", "x86")]
+)
 def test_a_machine_with_no_release_is_told_what_to_do(tool, system, machine):
     with pytest.raises(tool.CadcraftError, match="PATH"):
         tool.platform_key(system, machine)

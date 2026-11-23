@@ -9,6 +9,8 @@
 #   parts:       type: cadcraft:dwg   -> `partTypes:` below: the drawing's outlines, extruded
 #   assemblies:  type: cadcraft:dwg   -> `import:` below: each block a part, each reference an instance
 #   pc render -t cadcraft:dwg         -> `render:` below: a drawing of any object
+#   pc render -t cadcraft:pdf         -> `render:` below: a drawing sheet of it,
+#                                        dimensioned, with a title block
 #
 # Everything here runs CADCraft's command line tool, `cadcraft-cli`. It is found
 # on the PATH, in this package's image where PartCAD's `docker` sandbox is in
@@ -32,8 +34,8 @@ name: //pub/feature/cad/cadcraft
 desc: |
   [CADCraft](https://github.com/storytold/cadcraft) for PartCAD: AutoCAD
   drawings (DWG and DXF) read as parts and as assemblies, any object rendered
-  as a DWG or a DXF drawing, and CADCraft as an application `pc ide open` opens
-  drawings in.
+  as a DWG or a DXF drawing or as a dimensioned drawing sheet (PDF, SVG, PNG),
+  and CADCraft as an application `pc ide open` opens drawings in.
 
 # Where these scripts run best: PartCAD's Python sandbox image with CADCraft on
 # the PATH (see `Dockerfile`). A preference, not a requirement -- a machine
@@ -45,7 +47,7 @@ desc: |
 # image and the code expecting it cannot drift apart silently. PartCAD appends
 # the machine's architecture before pulling, so one line here covers both. See
 # `.github/workflows/image.yml` and `image-tag.sh`.
-dockerImage: ghcr.io/partcad/partcad-cadcraft:9a77dd0c26f5
+dockerImage: ghcr.io/partcad/partcad-cadcraft:5dac764e3006
 
 partTypes:
   dwg:
@@ -174,6 +176,12 @@ render:
     # rather than the clock's, which CADCraft carries into what it saves.
     reproducible: false
     cadcraftTimeout: 600
+    # The whole drawing sheet rather than one projection: what `pdf`, `svg` and
+    # `png` below write, saved as a DWG with its layout, its dimensions
+    # associated with the edges they measure. The sheet's own parameters (see
+    # `pdf`) apply then, and `viewport_origin`, `viewport_up` and `line_weight`
+    # do not; `hidden_lines` does, and is `false` here as for one projection.
+    sheet: false
   dxf:
     desc: |
       The object as a DXF drawing, written by CADCraft -- the alternative to
@@ -195,6 +203,64 @@ render:
     line_weight: null
     reproducible: false
     cadcraftTimeout: 600
+    sheet: false
+
+  # Drawing sheets: what somebody is handed to make the object from. PartCAD
+  # projects the views -- the front, top and right ones lined up in the
+  # drawing's projection, an isometric one in the corner left over, hidden edges
+  # dashed and every hole seen end on marked at its centre -- because CADCraft
+  # is a 2D drafting application with no 3D model to project. CADCraft does the
+  # drafting: the overall dimensions and the diameter of each size of hole, in
+  # its ISO style; an ISO A0-A4 layout with the ISO 5457 frame and a title
+  # block; one viewport at the largest ISO 5455 scale the views fit at; and the
+  # plot. See `render_sheet.py`. A sketch is drawn as the one view it is.
+  #
+  # This is what the Draft tab of PartCAD's editor extension shows when
+  # CADCraft is chosen in "Drawn by": `pc render -t svg -e //pub/feature/cad/cadcraft`.
+  #
+  # One entry for all three: the file type a name asks for is the file written.
+  # No `extension`, so that each keeps its own.
+  pdf: &sheet
+    desc: A dimensioned drawing sheet of the object -- views, dimensions and a title block -- drafted by CADCraft.
+    path: render_sheet.py
+    pythonRequirements:
+      - build123d==0.11.1
+      - cadquery-ocp==7.9.3.1.1
+      - ezdxf==1.4.4
+    # What the title block says. The names are the ones
+    # `//pub/feature/render/draftwright` and `//pub/feature/cad/solidcraft`
+    # take, so a package that configures its drawings once gets the same title
+    # block from any of the three. Unset, a cell is left empty; the title is the
+    # object's name.
+    title: null
+    number: null # Identification number
+    revision: null
+    drawn_by: null # Created by
+    approved_by: null
+    date: null # Date of issue
+    company: null # Legal owner
+    material: null
+    # The sheet: ISO A0 to A4; unset, A3 for a part and A2 for an assembly.
+    # Landscape, except A4, which ISO 5457 holds upright; `orientation` says
+    # otherwise.
+    page: null
+    orientation: null
+    # Paper over model: 2 is 2:1, 0.5 or "1:2" half size. Unset, the largest
+    # ISO 5455 scale the views fit the sheet at.
+    scale: null
+    # Third angle, or first: where the top and side views go.
+    projection: third
+    # The isometric view, the hidden edges, and the dimensions.
+    iso: true
+    hidden_lines: true
+    dimensions: true
+    # A sheet is the same bytes every time it is drawn from the same object:
+    # nothing in it is taken from the clock.
+    reproducible: false
+    visuals: false
+    cadcraftTimeout: 600
+  svg: *sheet
+  png: *sheet
 
 open:
   cadcraft:
@@ -210,4 +276,4 @@ open:
     # Where CADCraft is not installed: the same image as above, pulled on
     # demand, with the display forwarded into it.
     container:
-      image: ghcr.io/partcad/partcad-cadcraft:9a77dd0c26f5
+      image: ghcr.io/partcad/partcad-cadcraft:5dac764e3006
