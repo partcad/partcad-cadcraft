@@ -28,6 +28,9 @@ going through its SVG projection). build123d writes the drawing as DXF, and
 CADCraft saves it in the format and version asked for: 'dwgVersion' or
 'dxfVersion' (2000, 2004, 2007, 2010, 2013 or 2018) and, for a DXF, 'binary'.
 
+With 'sheet: true' it writes the whole drawing sheet instead -- views,
+dimensions, frame and title block -- which is 'render_sheet.py''s.
+
 Run by PartCAD's export wrapper with the shape in 'request["wrapped"]', the file
 to write as 'path', and 'request["cache_dir"]' to where 'cadcraft-cli' is kept.
 """
@@ -40,7 +43,7 @@ import tempfile
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 # Raise with any change to what this produces (see PartCAD's 'code_version').
-CACHE_VERSION = 1
+CACHE_VERSION = 2
 
 DEFAULT_VIEWPORT_ORIGIN = (0, 0, 100)
 DEFAULT_VIEWPORT_UP = (0, 1, 0)
@@ -96,6 +99,13 @@ def write_dxf(visible, hidden, path, request):
     exporter.write(path)
 
 
+def flag(value):
+    """A yes-or-no parameter, read as PartCAD reads its own: "false" from a caller that is not YAML is false."""
+    if isinstance(value, str):
+        return value.strip().lower() in ("true", "yes", "on", "1")
+    return bool(value)
+
+
 def version_of(request, key):
     value = request.get(key)
     if value in (None, ""):
@@ -107,6 +117,13 @@ def version_of(request, key):
 
 
 def process(path, request):
+    if flag(request.get("sheet")):
+        # The whole sheet -- views, dimensions, frame and title block -- rather
+        # than one projection: what the 'pdf', 'svg' and 'png' types write,
+        # saved as a drawing CADCraft and AutoCAD open with its layout.
+        import render_sheet
+
+        return render_sheet.process(path, request)
     try:
         import cadcraft_tool
 

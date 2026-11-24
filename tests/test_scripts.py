@@ -195,3 +195,15 @@ def test_a_reproducible_render_is_the_same_bytes_every_time(cadcraft, tmp_path, 
     time.sleep(1.1)  # across a second boundary, which is where a clock would show
     renderer.process(second, request)
     assert open(first, "rb").read() == open(second, "rb").read()
+
+
+@pytest.mark.parametrize(
+    "module, file", [("render_drawing", "a.dwg"), ("render_drawing", "a.dxf"), ("render_sheet", "a.dwg")]
+)
+def test_a_drawing_rendered_again_leaves_nothing_beside_it(cadcraft, tmp_path, module, file):
+    """CADCraft keeps a file a save replaces as '<name>.bak'; rendered into a package, that would pile up."""
+    renderer = plugin_module(module)
+    request = {"wrapped": b3d.Box(10, 20, 5).wrapped, "shape_kind": "part"}
+    for _ in range(2):
+        assert renderer.process(str(tmp_path / file), request)["success"]
+    assert os.listdir(tmp_path) == [file]

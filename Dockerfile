@@ -58,10 +58,10 @@ RUN apt-get update \
 # Python does the downloading because this base image has no curl, and
 # installing it to fetch one file would leave it here.
 RUN set -eu; \
-    CADCRAFT_VERSION=0.8.0; \
+    CADCRAFT_VERSION=0.20.1; \
     case "$(uname -m)" in \
-      x86_64) CADCRAFT_ARCH=x86_64; SHA256=df3c2e668439f0410564b1fa9d21827bb663eb3d01703902c41f02b9c5276193 ;; \
-      aarch64) CADCRAFT_ARCH=aarch64; SHA256=e7e7a805d683433733a77951326163506f203bd5dee515f465a5c575669d3f85 ;; \
+      x86_64) CADCRAFT_ARCH=x86_64; SHA256=57b6f1b41b4f3c542a82f103202ed1a779440e5ff8d25c08ef66abda1a8cb1b9 ;; \
+      aarch64) CADCRAFT_ARCH=aarch64; SHA256=b149db4bdf61d135fcb40ce7361828c75b18d6f3f710e165ca17f30819d23212 ;; \
       *) echo "this image pins no CADCraft for $(uname -m)" >&2; exit 1 ;; \
     esac; \
     python3 -c 'import hashlib, io, sys, tarfile, urllib.request; url, want, prefix = sys.argv[1:4]; blob = urllib.request.urlopen(url).read(); got = hashlib.sha256(blob).hexdigest(); got == want or sys.exit("%s hashes to %s, not the pinned %s" % (url, got, want)); archive = tarfile.open(fileobj=io.BytesIO(blob), mode="r:gz"); members = [m for m in archive.getmembers() if "/" in m.name]; [setattr(m, "name", m.name.split("/", 1)[1]) for m in members]; archive.extractall(prefix, members=members, filter="data")' \
